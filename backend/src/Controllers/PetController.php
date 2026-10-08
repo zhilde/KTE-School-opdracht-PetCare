@@ -24,7 +24,7 @@ class PetController
     public function show(int $id): void
     {
         $user = Auth::requireRole('owner');
-        $pet = $this->findOwnPet($id, $user['id']);
+        $pet = AccessService::ownPet($id, $user);
 
         Response::json(['pet' => $pet]);
     }
@@ -52,7 +52,7 @@ class PetController
     public function update(int $id): void
     {
         $user = Auth::requireRole('owner');
-        $this->findOwnPet($id, $user['id']); // stopt met 404 als het niet jouw dier is
+        AccessService::ownPet($id, $user); // stopt met 404 als het niet jouw dier is
         [$name, $species] = $this->validatePet(Request::body());
 
         $stmt = Database::connect()->prepare('UPDATE pets SET name = ?, species = ? WHERE id = ?');
@@ -66,7 +66,7 @@ class PetController
     public function destroy(int $id): void
     {
         $user = Auth::requireRole('owner');
-        $pet = $this->findOwnPet($id, $user['id']);
+        $pet = AccessService::ownPet($id, $user);
         $pdo = Database::connect();
 
         // Besluit J: niet verwijderen zolang er een lopende boeking is
@@ -87,23 +87,6 @@ class PetController
         $stmt->execute([$id]);
 
         Response::json(['message' => "{$pet['name']} is verwijderd."]);
-    }
-
-    // Zoekt een dier dat van deze eigenaar is.
-    // Niet gevonden OF van iemand anders? Dan 404. Zo verraden we niet dat het dier bestaat.
-    private function findOwnPet(int $id, int $ownerId): array
-    {
-        $stmt = Database::connect()->prepare(
-            'SELECT id, name, species FROM pets WHERE id = ? AND owner_id = ?'
-        );
-        $stmt->execute([$id, $ownerId]);
-        $pet = $stmt->fetch();
-
-        if (!$pet) {
-            throw new ApiException('Dier niet gevonden.', 404);
-        }
-
-        return $pet;
     }
 
     // Controleert naam en soort, en geeft ze terug als ze kloppen.

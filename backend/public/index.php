@@ -10,7 +10,17 @@ require_once __DIR__ . '/../src/Response.php';
 require_once __DIR__ . '/../src/Router.php';
 require_once __DIR__ . '/../src/Request.php';
 require_once __DIR__ . '/../src/Auth.php';
+require_once __DIR__ . '/../src/Validator.php';
 require_once __DIR__ . '/../src/Controllers/AuthController.php';
+require_once __DIR__ . '/../src/Services/CapacityService.php';
+require_once __DIR__ . '/../src/Services/AccessService.php';
+require_once __DIR__ . '/../src/Controllers/PetController.php';
+require_once __DIR__ . '/../src/Controllers/ShelterController.php';
+require_once __DIR__ . '/../src/Controllers/CapacityController.php';
+require_once __DIR__ . '/../src/Controllers/EmployeeController.php';
+require_once __DIR__ . '/../src/Controllers/BookingController.php';
+require_once __DIR__ . '/../src/Controllers/PlanningController.php';
+require_once __DIR__ . '/../src/Controllers/CareController.php';
 
 // Nederlandse tijd gebruiken, anders kloppen datums zoals "vandaag" niet
 date_default_timezone_set('Europe/Amsterdam');

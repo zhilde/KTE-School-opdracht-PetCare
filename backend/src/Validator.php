@@ -94,6 +94,31 @@ class Validator
         }
     }
 
+    // Controleert een periode (bv. van een boeking):
+    // start niet in het verleden, eind op of na start, en niet langer dan $maxDays dagen.
+    // Roep eerst date() aan voor beide velden.
+    public function period(string $startField, string $endField, int $maxDays): void
+    {
+        $start = $this->get($startField);
+        $end = $this->get($endField);
+
+        // Alleen controleren als beide datums zelf geldig zijn
+        if ($start === '' || $end === '' || $this->hasError($startField) || $this->hasError($endField)) {
+            return;
+        }
+
+        // Datums in de vorm jjjj-mm-dd kun je gewoon als tekst vergelijken
+        if ($start < date('Y-m-d')) {
+            $this->addError($startField, 'De startdatum mag niet in het verleden liggen.');
+        }
+
+        if ($end < $start) {
+            $this->addError($endField, 'De einddatum moet op of na de startdatum liggen.');
+        } elseif ((new DateTime($start))->diff(new DateTime($end))->days >= $maxDays) {
+            $this->addError($endField, "Je kunt maximaal $maxDays dagen achter elkaar boeken.");
+        }
+    }
+
     // Is er al een fout bij dit veld? Handig om extra controles over te slaan.
     public function hasError(string $field): bool
     {

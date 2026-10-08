@@ -98,6 +98,7 @@ export default function PetList() {
               </div>
             ) : (
               <div className="actions">
+                <Link to={`/dieren/${pet.id}`} className="btn btn-primary">Bekijken</Link>
                 <Link to={`/dieren/${pet.id}/bewerken`} className="btn btn-secondary">Wijzigen</Link>
                 <button type="button" className="btn btn-danger" onClick={() => setConfirmId(pet.id)}>Verwijderen</button>
               </div>

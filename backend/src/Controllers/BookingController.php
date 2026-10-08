@@ -49,12 +49,7 @@ class BookingController
         $pdo = Database::connect();
 
         // 2. Is het dier van deze eigenaar? (anders 404, zelfde als bij de dierenprofielen)
-        $stmt = $pdo->prepare('SELECT id, name, species FROM pets WHERE id = ? AND owner_id = ?');
-        $stmt->execute([$petId, $user['id']]);
-        $pet = $stmt->fetch();
-        if (!$pet) {
-            throw new ApiException('Dier niet gevonden.', 404);
-        }
+        $pet = AccessService::ownPet($petId, $user);
 
         // 3. Bestaat de opvang?
         $stmt = $pdo->prepare('SELECT name FROM shelters WHERE id = ?');

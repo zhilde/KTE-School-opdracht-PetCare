@@ -3,9 +3,6 @@
 // API voor opvanglocaties en beschikbaarheid (FE2)
 class ShelterController
 {
-    // Maximaal zoveel dagen per zoekopdracht, zodat de berekening snel blijft
-    private const MAX_DAYS = 60;
-
     // GET /api/shelters – lijst met alle opvangen (voor keuzelijsten)
     public function index(): void
     {
@@ -30,24 +27,12 @@ class ShelterController
         $v->date('start', 'Vul een geldige startdatum in.');
         $v->required('end', 'Kies een einddatum.');
         $v->date('end', 'Vul een geldige einddatum in.');
+        $v->period('start', 'end', CapacityService::MAX_DAYS);
+        $v->validate();
 
         $species = $v->get('species');
         $start = $v->get('start');
         $end = $v->get('end');
-
-        // Extra controles op de datums, alleen als ze zelf geldig zijn.
-        // Datums in de vorm jjjj-mm-dd kun je gewoon als tekst vergelijken.
-        if (!$v->hasError('start') && $start < date('Y-m-d')) {
-            $v->addError('start', 'De startdatum mag niet in het verleden liggen.');
-        }
-        if (!$v->hasError('start') && !$v->hasError('end')) {
-            if ($end < $start) {
-                $v->addError('end', 'De einddatum moet op of na de startdatum liggen.');
-            } elseif ((new DateTime($start))->diff(new DateTime($end))->days >= self::MAX_DAYS) {
-                $v->addError('end', 'Je kunt maximaal ' . self::MAX_DAYS . ' dagen achter elkaar boeken.');
-            }
-        }
-        $v->validate();
 
         $result = [];
         $shelters = Database::connect()->query('SELECT id, name, address FROM shelters ORDER BY name')->fetchAll();

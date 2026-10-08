@@ -17,3 +17,42 @@ $auth = new AuthController();
 $router->post('/api/login', [$auth, 'login']);
 $router->post('/api/logout', [$auth, 'logout']);
 $router->get('/api/me', [$auth, 'me']);
+
+// Dierenprofielen (FE1)
+$pets = new PetController();
+$router->get('/api/pets', [$pets, 'index']);
+$router->post('/api/pets', [$pets, 'store']);
+$router->get('/api/pets/{id}', [$pets, 'show']);
+$router->put('/api/pets/{id}', [$pets, 'update']);
+$router->delete('/api/pets/{id}', [$pets, 'destroy']);
+
+// Verzorgingsinstructies en wijzigingsregistratie (FE5)
+$care = new CareController();
+$router->get('/api/pets/{id}/care', [$care, 'show']);
+$router->put('/api/pets/{id}/care', [$care, 'save']);
+
+// Opvangen en beschikbaarheid (FE2)
+$shelters = new ShelterController();
+$router->get('/api/shelters', [$shelters, 'index']);
+$router->get('/api/availability', [$shelters, 'availability']);
+
+// Opvangaanvragen van de eigenaar (FE2)
+$bookings = new BookingController();
+$router->get('/api/bookings/mine', [$bookings, 'mine']);
+$router->post('/api/bookings', [$bookings, 'store']);
+
+// Dagplanning voor medewerker en beheerder (FE4)
+$planning = new PlanningController();
+$router->get('/api/planning', [$planning, 'index']);
+
+// Capaciteit beheren, alleen beheerder (FE3)
+$capacities = new CapacityController();
+$router->get('/api/capacities', [$capacities, 'index']);
+$router->put('/api/capacities', [$capacities, 'save']);
+
+// Medewerkers koppelen aan opvangen, alleen beheerder (AFW-2)
+$employees = new EmployeeController();
+$router->get('/api/employees', [$employees, 'index']);
+$router->get('/api/shelter-employees', [$employees, 'links']);
+$router->post('/api/shelter-employees', [$employees, 'link']);
+$router->delete('/api/shelter-employees/{id}', [$employees, 'unlink']);

@@ -7,6 +7,9 @@
 // Een afgewezen boeking (REJECTED) telt niet mee.
 class CapacityService
 {
+    // Maximaal zoveel dagen per boeking/zoekopdracht, zodat de berekening snel blijft
+    public const MAX_DAYS = 60;
+
     // Geeft voor elke dag van $start t/m $end terug:
     //   date         = de datum
     //   max_slots    = ingestelde plekken (0 als er niks is ingesteld)

@@ -31,4 +31,21 @@ class AccessService
     {
         return array_map('intval', array_column(self::shelters($user), 'id'));
     }
+
+    // Zoekt een dier dat van deze eigenaar is.
+    // Niet gevonden OF van iemand anders? Dan 404. Zo verraden we niet dat het dier bestaat.
+    public static function ownPet(int $petId, array $user): array
+    {
+        $stmt = Database::connect()->prepare(
+            'SELECT id, name, species FROM pets WHERE id = ? AND owner_id = ?'
+        );
+        $stmt->execute([$petId, $user['id']]);
+        $pet = $stmt->fetch();
+
+        if (!$pet) {
+            throw new ApiException('Dier niet gevonden.', 404);
+        }
+
+        return $pet;
+    }
 }
