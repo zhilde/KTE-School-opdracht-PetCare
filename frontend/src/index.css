@@ -147,9 +147,18 @@ summary { cursor: pointer; font-weight: 600; }
 .calendar { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 24px; }
 .calendar-weekday, .calendar-empty { display: none; }
 .calendar-day {
+  position: relative; /* nodig voor de klikbare laag van .calendar-date::after */
   display: flex; flex-direction: column; gap: 4px;
   background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
 }
+/* Het hele vakje is klikbaar: een onzichtbare laag van de datumknop ligt over het hele vakje */
+.calendar-date::after { content: ''; position: absolute; inset: 0; border-radius: 8px; }
+/* Diersoort-knoppen liggen boven die laag, zodat ze apart klikbaar blijven */
+.calendar-slot { position: relative; z-index: 1; }
+/* Laten zien dat je kunt klikken (muis) of waar de focus is (toetsenbord) */
+.calendar-day:not(.is-past):hover { border-color: var(--primary); cursor: pointer; }
+.calendar-day:has(.calendar-date:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.calendar-date:focus-visible { outline: none; }
 .calendar-day.is-empty { display: none; }
 .calendar-day.is-past { opacity: 0.55; }
 .calendar-day.is-today { border: 2px solid var(--primary); }
