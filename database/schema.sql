@@ -107,7 +107,8 @@ CREATE TABLE capacities (
 
 -- -------------------------------------------------------------
 -- bookings: opvangaanvragen (FE2, FE6)
--- PENDING en APPROVED tellen als bezette plek, REJECTED niet (besluit D).
+-- PENDING en APPROVED tellen als bezette plek, REJECTED en CANCELLED niet (besluit D).
+-- CANCELLED = geannuleerd door de eigenaar (AFW-6).
 -- -------------------------------------------------------------
 CREATE TABLE bookings (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -115,7 +116,7 @@ CREATE TABLE bookings (
     shelter_id  INT UNSIGNED NOT NULL,
     start_date  DATE NOT NULL,
     end_date    DATE NOT NULL,
-    status      ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    status      ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- Einddatum mag niet vóór de startdatum liggen (extra vangnet naast de PHP-validatie)

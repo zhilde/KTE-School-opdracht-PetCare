@@ -1,0 +1,12 @@
+# Geheime instellingen nooit in Git
+/backend/.env
+
+# Wordt opnieuw gemaakt met npm install
+/frontend/node_modules/
+/frontend/dist/
+
+# Tijdelijke bestanden
+*.log
+.phpunit.result.cache
+Thumbs.db
+.DS_Store
