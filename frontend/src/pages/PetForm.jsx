@@ -17,6 +17,7 @@ export default function PetForm() {
   const [errors, setErrors] = useState({})
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
 
   // Bij wijzigen eerst de huidige gegevens ophalen
@@ -27,7 +28,7 @@ export default function PetForm() {
         setName(data.pet.name)
         setSpecies(data.pet.species)
       })
-      .catch((error) => setErrorMessage(error.message))
+      .catch((error) => setLoadError(error.message))
       .finally(() => setLoading(false))
   }, [id, isEdit])
 
@@ -55,6 +56,17 @@ export default function PetForm() {
 
   if (loading) {
     return <p className="loading">Bezig met laden…</p>
+  }
+
+  // Dier kon niet geladen worden (bv. bestaat niet): geen leeg formulier tonen
+  if (loadError) {
+    return (
+      <section>
+        <h1>Dier wijzigen</h1>
+        <Alert type="error">{loadError}</Alert>
+        <Link to="/dieren">← Terug naar mijn dieren</Link>
+      </section>
+    )
   }
 
   return (

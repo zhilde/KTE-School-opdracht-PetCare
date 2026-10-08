@@ -13,7 +13,10 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState({})
+  // Melding die meekomt via de navigatie, bv. "Je bent uitgelogd." (succes)
+  // of "Je sessie is verlopen." (fout)
   const [message, setMessage] = useState(location.state?.message ?? '')
+  const messageType = location.state?.type ?? 'success'
   const [errorMessage, setErrorMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -45,7 +48,7 @@ export default function Login() {
       <div className="card login-card">
         <img src={logo} alt="PetCare" className="login-logo" />
 
-        {message && <Alert type="success">{message}</Alert>}
+        {message && <Alert type={messageType}>{message}</Alert>}
         {errorMessage && <Alert type="error">{errorMessage}</Alert>}
 
         {/* noValidate: de controle doet PHP, zodat de meldingen overal hetzelfde zijn */}
