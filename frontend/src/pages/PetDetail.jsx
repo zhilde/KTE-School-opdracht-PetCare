@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../AuthContext.jsx'
 import { api } from '../api.js'
 import { speciesLabel } from '../constants.js'
 import Alert from '../components/Alert.jsx'
@@ -20,13 +21,19 @@ function formatDateTime(value) {
 
 const roleNames = { owner: 'eigenaar', employee: 'medewerker', admin: 'beheerder' }
 
-// Scherm "Dierdetails" (FE5): verzorgingsinstructies bekijken en wijzigen + wijzigingsgeschiedenis
+// Scherm "Dierdetails" (FE5, FE7): verzorgingsinstructies bekijken en wijzigen + wijzigingsgeschiedenis.
+// Eigenaar mag wijzigen. Medewerker/beheerder mogen alleen bekijken; wat ze zien bepaalt de API.
 export default function PetDetail() {
   const { id } = useParams()
+  const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [pet, setPet] = useState(null)
   const [instructions, setInstructions] = useState([])
   const [changes, setChanges] = useState([])
+  // Komen van de API: is er gevoelige informatie afgeschermd, en mag je wijzigen?
+  const [sensitiveHidden, setSensitiveHidden] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -45,6 +52,8 @@ export default function PetDetail() {
         setPet(data.pet)
         setInstructions(data.instructions)
         setChanges(data.changes)
+        setSensitiveHidden(data.sensitive_hidden)
+        setCanEdit(data.can_edit)
       })
       .catch((error) => setErrorMessage(error.message))
       .finally(() => setLoading(false))
@@ -85,6 +94,14 @@ export default function PetDetail() {
     }
   }
 
+  // Terug-link: eigenaar naar zijn dieren, medewerker/beheerder naar de vorige pagina
+  const backLink = user.role === 'owner'
+    ? <Link to="/dieren">← Terug naar mijn dieren</Link>
+    : <button type="button" className="link-button" onClick={() => navigate(-1)}>← Terug</button>
+
+  // Afgeschermde types tonen we niet als blok (de API stuurt ze ook niet mee)
+  const visibleTypes = CARE_TYPES.filter((t) => !(sensitiveHidden && t.sensitive))
+
   if (loading) {
     return <p className="loading">Bezig met laden…</p>
   }
@@ -93,27 +110,35 @@ export default function PetDetail() {
     return (
       <section>
         <Alert type="error">{errorMessage || 'Dier niet gevonden.'}</Alert>
-        <Link to="/dieren">← Terug naar mijn dieren</Link>
+        {backLink}
       </section>
     )
   }
 
   return (
     <section>
-      <p><Link to="/dieren">← Terug naar mijn dieren</Link></p>
+      <p>{backLink}</p>
       <h1>{pet.name} <span className="muted">({speciesLabel(pet.species)})</span></h1>
 
       {message && <Alert type="success" onClose={() => setMessage('')}>{message}</Alert>}
       {errorMessage && <Alert type="error" onClose={() => setErrorMessage('')}>{errorMessage}</Alert>}
 
-      {CARE_TYPES.map(({ type, label, sensitive }) => (
+      {/* FE7: uitleg waarom medicatie en gedrag ontbreken */}
+      {sensitiveHidden && (
+        <Alert type="empty">
+          🔒 Medicatie en gedrag zijn afgeschermd. Deze informatie is alleen zichtbaar voor medewerkers
+          van een opvang waar {pet.name} een aanvraag of boeking heeft.
+        </Alert>
+      )}
+
+      {visibleTypes.map(({ type, label, sensitive }) => (
         <div key={type} className="card">
           <div className="instruction-head">
             <h2>
               {label}{' '}
               {sensitive && <span className="badge badge-sensitive">🔒 Gevoelig</span>}
             </h2>
-            {editing !== type && (
+            {canEdit && editing !== type && (
               <button type="button" className="btn btn-secondary btn-small" onClick={() => startEdit(type)}>
                 {textOf(type) ? 'Wijzigen' : 'Toevoegen'}
               </button>
