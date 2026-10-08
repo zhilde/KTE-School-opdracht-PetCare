@@ -62,6 +62,44 @@ class Validator
         }
     }
 
+    // Veld moet een geldige datum zijn in de vorm jjjj-mm-dd (zo stuurt een <input type="date"> hem)
+    public function date(string $field, string $message): void
+    {
+        $value = $this->get($field);
+
+        if ($value === '') {
+            return;
+        }
+
+        // ! = tijd op 00:00 zetten. Daarna terug omzetten en vergelijken,
+        // zo wordt bv. 2026-02-31 (bestaat niet) ook afgekeurd.
+        $date = DateTime::createFromFormat('!Y-m-d', $value);
+        if (!$date || $date->format('Y-m-d') !== $value) {
+            $this->addError($field, $message);
+        }
+    }
+
+    // Veld moet een heel getal zijn tussen $min en $max
+    public function integer(string $field, int $min, int $max, string $message): void
+    {
+        $value = $this->get($field);
+
+        if ($value === '') {
+            return;
+        }
+
+        $options = ['options' => ['min_range' => $min, 'max_range' => $max]];
+        if (filter_var($value, FILTER_VALIDATE_INT, $options) === false) {
+            $this->addError($field, $message);
+        }
+    }
+
+    // Is er al een fout bij dit veld? Handig om extra controles over te slaan.
+    public function hasError(string $field): bool
+    {
+        return isset($this->errors[$field]);
+    }
+
     // Stopt met 422 als er fouten zijn gevonden
     public function validate(): void
     {
@@ -70,8 +108,10 @@ class Validator
         }
     }
 
-    // Per veld bewaren we alleen de eerste fout, dat is duidelijker voor de gebruiker
-    private function addError(string $field, string $message): void
+    // Fout toevoegen. Public, zodat een controller ook eigen controles kan doen
+    // (bv. "einddatum moet na startdatum liggen").
+    // Per veld bewaren we alleen de eerste fout, dat is duidelijker voor de gebruiker.
+    public function addError(string $field, string $message): void
     {
         if (!isset($this->errors[$field])) {
             $this->errors[$field] = $message;
