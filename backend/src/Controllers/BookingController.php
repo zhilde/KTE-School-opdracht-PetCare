@@ -1,9 +1,118 @@
 <?php
 
-// API voor opvangaanvragen van de eigenaar (FE2, FE6).
+// API voor opvangaanvragen (FE2, FE6).
+// - Eigenaar: aanvraag indienen en eigen aanvragen met status bekijken
+// - Medewerker/beheerder: aanvragen van de eigen opvang(en) bekijken, goedkeuren of afwijzen
 // Een aanvraag wordt alleen opgeslagen als er op ELKE dag van de periode plek is.
 class BookingController
 {
+    // Mogelijke statussen (zelfde als de ENUM in de database)
+    public const STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
+
+    // GET /api/bookings?status=PENDING&shelter_id=1 – aanvragen voor medewerker/beheerder
+    // status en shelter_id zijn optioneel (leeg = alle)
+    public function index(): void
+    {
+        $user = Auth::requireRole('employee', 'admin');
+
+        $v = new Validator($_GET);
+        $v->in('status', self::STATUSES, 'Kies een status uit de lijst.');
+        $v->integer('shelter_id', 1, PHP_INT_MAX, 'Kies een opvang uit de lijst.');
+        $v->validate();
+
+        $status = $v->get('status');
+        $shelterFilter = $v->get('shelter_id');
+
+        // Alleen aanvragen van opvangen waar deze gebruiker bij mag
+        $shelters = AccessService::shelters($user);
+        $allowedIds = array_map('intval', array_column($shelters, 'id'));
+
+        if ($shelterFilter !== '' && !in_array((int) $shelterFilter, $allowedIds, true)) {
+            throw new ApiException('Je hebt geen toegang tot de aanvragen van deze opvang.', 403);
+        }
+
+        $shelterIds = $shelterFilter !== '' ? [(int) $shelterFilter] : $allowedIds;
+
+        if (empty($shelterIds)) {
+            Response::json(['shelters' => $shelters, 'bookings' => []]);
+            return;
+        }
+
+        // Voor elke opvang een ? in de query
+        $placeholders = implode(', ', array_fill(0, count($shelterIds), '?'));
+        $params = $shelterIds;
+
+        $sql = "SELECT b.id, b.start_date, b.end_date, b.status,
+                       p.id AS pet_id, p.name AS pet_name, p.species,
+                       s.name AS shelter_name, u.name AS owner_name
+                FROM bookings b
+                JOIN pets p ON p.id = b.pet_id
+                JOIN shelters s ON s.id = b.shelter_id
+                JOIN users u ON u.id = p.owner_id
+                WHERE b.shelter_id IN ($placeholders)";
+
+        if ($status !== '') {
+            $sql .= ' AND b.status = ?';
+            $params[] = $status;
+        }
+
+        $sql .= ' ORDER BY b.start_date, p.name';
+
+        $stmt = Database::connect()->prepare($sql);
+        $stmt->execute($params);
+
+        Response::json(['shelters' => $shelters, 'bookings' => $stmt->fetchAll()]);
+    }
+
+    // PUT /api/bookings/{id}/approve – aanvraag goedkeuren
+    public function approve(int $id): void
+    {
+        $this->review($id, 'APPROVED');
+    }
+
+    // PUT /api/bookings/{id}/reject – aanvraag afwijzen (de plek komt weer vrij, besluit D)
+    public function reject(int $id): void
+    {
+        $this->review($id, 'REJECTED');
+    }
+
+    // Goedkeuren en afwijzen werken hetzelfde, alleen de nieuwe status verschilt
+    private function review(int $id, string $newStatus): void
+    {
+        $user = Auth::requireRole('employee', 'admin');
+        $pdo = Database::connect();
+
+        $stmt = $pdo->prepare(
+            'SELECT b.id, b.shelter_id, b.status, p.name AS pet_name
+             FROM bookings b
+             JOIN pets p ON p.id = b.pet_id
+             WHERE b.id = ?'
+        );
+        $stmt->execute([$id]);
+        $booking = $stmt->fetch();
+
+        if (!$booking) {
+            throw new ApiException('Aanvraag niet gevonden.', 404);
+        }
+
+        // Alleen aanvragen van je eigen opvang(en) beoordelen
+        if (!in_array((int) $booking['shelter_id'], AccessService::shelterIds($user), true)) {
+            throw new ApiException('Je hebt geen toegang tot aanvragen van deze opvang.', 403);
+        }
+
+        // "AND status = 'PENDING'" zorgt dat een aanvraag maar 1 keer beoordeeld kan worden,
+        // ook als twee medewerkers precies tegelijk op een knop drukken.
+        // rowCount() = hoeveel regels er echt zijn aangepast (0 = was al beoordeeld)
+        $stmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ? AND status = 'PENDING'");
+        $stmt->execute([$newStatus, $id]);
+
+        if ($stmt->rowCount() === 0) {
+            throw new ApiException('Deze aanvraag is al beoordeeld.', 409);
+        }
+
+        $word = $newStatus === 'APPROVED' ? 'goedgekeurd' : 'afgewezen';
+        Response::json(['message' => "Aanvraag voor {$booking['pet_name']} is $word."]);
+    }
     // GET /api/bookings/mine – alle aanvragen van de ingelogde eigenaar, met status
     public function mine(): void
     {

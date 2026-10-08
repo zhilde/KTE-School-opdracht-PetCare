@@ -41,6 +41,11 @@ $bookings = new BookingController();
 $router->get('/api/bookings/mine', [$bookings, 'mine']);
 $router->post('/api/bookings', [$bookings, 'store']);
 
+// Aanvragen beoordelen door medewerker/beheerder (FE6)
+$router->get('/api/bookings', [$bookings, 'index']);
+$router->put('/api/bookings/{id}/approve', [$bookings, 'approve']);
+$router->put('/api/bookings/{id}/reject', [$bookings, 'reject']);
+
 // Dagplanning voor medewerker en beheerder (FE4)
 $planning = new PlanningController();
 $router->get('/api/planning', [$planning, 'index']);
