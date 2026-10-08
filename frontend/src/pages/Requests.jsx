@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { formatDate, speciesLabel } from '../constants.js'
 import Alert from '../components/Alert.jsx'
@@ -9,6 +10,7 @@ const STATUS_OPTIONS = [
   { value: 'PENDING', label: 'In behandeling' },
   { value: 'APPROVED', label: 'Goedgekeurd' },
   { value: 'REJECTED', label: 'Afgewezen' },
+  { value: 'CANCELLED', label: 'Geannuleerd' },
   { value: '', label: 'Alle statussen' },
 ]
 
@@ -107,7 +109,7 @@ export default function Requests() {
             <tbody>
               {bookings.map((b) => (
                 <tr key={b.id}>
-                  <td data-label="Dier"><strong>{b.pet_name}</strong></td>
+                  <td data-label="Dier"><Link to={`/dieren/${b.pet_id}`}><strong>{b.pet_name}</strong></Link></td>
                   <td data-label="Soort">{speciesLabel(b.species)}</td>
                   <td data-label="Eigenaar">{b.owner_name}</td>
                   <td data-label="Opvang">{b.shelter_name}</td>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { SPECIES, formatDate, speciesLabel, today } from '../constants.js'
 import Alert from '../components/Alert.jsx'
@@ -103,7 +104,10 @@ export default function Planning() {
                 <span>
                   <strong>{item.pet_name}</strong> · {speciesLabel(item.species)} · eigenaar {item.owner_name}
                 </span>
-                <span className="muted">t/m {formatDate(item.end_date)}</span>
+                <span>
+                  <span className="muted">t/m {formatDate(item.end_date)}</span>{' '}
+                  <Link to={`/dieren/${item.pet_id}`}>Details →</Link>
+                </span>
               </li>
             ))}
           </ul>

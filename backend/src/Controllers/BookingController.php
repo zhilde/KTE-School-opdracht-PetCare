@@ -7,7 +7,8 @@
 class BookingController
 {
     // Mogelijke statussen (zelfde als de ENUM in de database)
-    public const STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
+    // CANCELLED = geannuleerd door de eigenaar (AFW-6)
+    public const STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 
     // GET /api/bookings?status=PENDING&shelter_id=1 – aanvragen voor medewerker/beheerder
     // status en shelter_id zijn optioneel (leeg = alle)
@@ -119,7 +120,7 @@ class BookingController
         $user = Auth::requireRole('owner');
 
         $stmt = Database::connect()->prepare(
-            'SELECT b.id, b.start_date, b.end_date, b.status,
+            'SELECT b.id, b.start_date, b.end_date, b.status, b.shelter_id,
                     p.name AS pet_name, p.species, s.name AS shelter_name
              FROM bookings b
              JOIN pets p ON p.id = b.pet_id
@@ -161,29 +162,12 @@ class BookingController
         $pet = AccessService::ownPet($petId, $user);
 
         // 3. Bestaat de opvang?
-        $stmt = $pdo->prepare('SELECT name FROM shelters WHERE id = ?');
-        $stmt->execute([$shelterId]);
-        $shelterName = $stmt->fetchColumn();
-        if ($shelterName === false) {
-            throw new ApiException('Controleer de ingevulde velden.', 422, ['shelter_id' => 'Kies een opvang uit de lijst.']);
-        }
+        $shelterName = $this->shelterName($shelterId);
 
-        // 4. Controleren en opslaan in een TRANSACTIE.
-        // Probleem zonder transactie: twee eigenaren boeken tegelijk de laatste plek,
-        // allebei zien ze "1 vrij" en allebei wordt de boeking opgeslagen -> overvol.
-        // Oplossing: FOR UPDATE zet een slot (lock) op de capaciteitsregels van deze periode.
-        // Een tweede boeking voor dezelfde opvang en diersoort moet dan wachten
-        // tot de eerste klaar is, en ziet daarna de juiste (bijgewerkte) bezetting.
+        // 4. Controleren en opslaan in een TRANSACTIE (uitleg bij lockAndCheckCapacity)
         $pdo->beginTransaction();
 
         try {
-            $stmt = $pdo->prepare(
-                'SELECT id FROM capacities
-                 WHERE shelter_id = ? AND species = ? AND date BETWEEN ? AND ?
-                 FOR UPDATE'
-            );
-            $stmt->execute([$shelterId, $pet['species'], $start, $end]);
-
             // 4a. Heeft dit dier al een aanvraag die overlapt met deze periode? (ook bij een andere opvang)
             $stmt = $pdo->prepare(
                 "SELECT COUNT(*) FROM bookings
@@ -195,16 +179,8 @@ class BookingController
                 throw new ApiException("{$pet['name']} heeft al een aanvraag in (een deel van) deze periode.", 409);
             }
 
-            // 4b. Is er op elke dag nog plek?
-            $fullDates = [];
-            foreach (CapacityService::perDay($shelterId, $pet['species'], $start, $end) as $day) {
-                if ($day['free'] === 0) {
-                    $fullDates[] = date('d-m-Y', strtotime($day['date']));
-                }
-            }
-            if (!empty($fullDates)) {
-                throw new ApiException("Geen plek beschikbaar bij $shelterName op: " . implode(', ', $fullDates) . '. De aanvraag is niet opgeslagen.', 409);
-            }
+            // 4b. Slot zetten en controleren of er op elke dag nog plek is
+            $this->lockAndCheckCapacity($pdo, $shelterId, $shelterName, $pet['species'], $start, $end);
 
             // 4c. Alles klopt: aanvraag opslaan met status PENDING
             $stmt = $pdo->prepare(
@@ -226,5 +202,141 @@ class BookingController
             'message' => "Aanvraag voor {$pet['name']} bij $shelterName is verstuurd. De status is nu: in behandeling.",
             'booking_id' => $bookingId,
         ], 201);
+    }
+
+    // PUT /api/bookings/{id}/cancel – eigenaar annuleert zijn aanvraag of boeking.
+    // De plek komt weer vrij, want CANCELLED telt niet als bezet.
+    public function cancel(int $id): void
+    {
+        $user = Auth::requireRole('owner');
+        $booking = $this->findChangeableBooking($id, $user);
+
+        // "AND status IN (...)": zo kan het maar 1 keer, ook als er tegelijk iets anders gebeurt
+        $stmt = Database::connect()->prepare(
+            "UPDATE bookings SET status = 'CANCELLED' WHERE id = ? AND status IN ('PENDING', 'APPROVED')"
+        );
+        $stmt->execute([$id]);
+
+        if ($stmt->rowCount() === 0) {
+            throw new ApiException('Deze aanvraag kan niet meer worden geannuleerd.', 409);
+        }
+
+        Response::json(['message' => "De aanvraag voor {$booking['pet_name']} is geannuleerd."]);
+    }
+
+    // PUT /api/bookings/{id}/shelter – eigenaar verplaatst zijn aanvraag naar een andere opvang.
+    // Verwacht JSON: { "shelter_id": 2 }
+    // De nieuwe opvang moet de aanvraag opnieuw beoordelen, dus de status wordt weer PENDING.
+    public function changeShelter(int $id): void
+    {
+        $user = Auth::requireRole('owner');
+        $booking = $this->findChangeableBooking($id, $user);
+
+        $v = new Validator(Request::body());
+        $v->required('shelter_id', 'Kies een opvang.');
+        $v->integer('shelter_id', 1, PHP_INT_MAX, 'Kies een opvang uit de lijst.');
+        $v->validate();
+
+        $newShelterId = (int) $v->get('shelter_id');
+        if ($newShelterId === (int) $booking['shelter_id']) {
+            throw new ApiException('Controleer de ingevulde velden.', 422, ['shelter_id' => 'Kies een andere opvang dan de huidige.']);
+        }
+
+        $shelterName = $this->shelterName($newShelterId);
+        $pdo = Database::connect();
+        $pdo->beginTransaction();
+
+        try {
+            // Plek controleren bij de NIEUWE opvang (met slot, net als bij een nieuwe aanvraag)
+            $this->lockAndCheckCapacity($pdo, $newShelterId, $shelterName, $booking['species'], $booking['start_date'], $booking['end_date']);
+
+            $stmt = $pdo->prepare(
+                "UPDATE bookings SET shelter_id = ?, status = 'PENDING'
+                 WHERE id = ? AND status IN ('PENDING', 'APPROVED')"
+            );
+            $stmt->execute([$newShelterId, $id]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new ApiException('Deze aanvraag kan niet meer worden gewijzigd.', 409);
+            }
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+
+        Response::json(['message' => "De aanvraag voor {$booking['pet_name']} is verplaatst naar $shelterName. De status is weer: in behandeling."]);
+    }
+
+    // Zoekt een aanvraag van deze eigenaar die nog gewijzigd/geannuleerd mag worden:
+    // - van een eigen dier (anders 404)
+    // - status PENDING of APPROVED (afgewezen of geannuleerd kan niet meer)
+    // - de opvang is nog niet begonnen (startdatum vandaag of later)
+    private function findChangeableBooking(int $id, array $user): array
+    {
+        $stmt = Database::connect()->prepare(
+            'SELECT b.id, b.shelter_id, b.start_date, b.end_date, b.status, p.name AS pet_name, p.species
+             FROM bookings b
+             JOIN pets p ON p.id = b.pet_id
+             WHERE b.id = ? AND p.owner_id = ?'
+        );
+        $stmt->execute([$id, $user['id']]);
+        $booking = $stmt->fetch();
+
+        if (!$booking) {
+            throw new ApiException('Aanvraag niet gevonden.', 404);
+        }
+        if (!in_array($booking['status'], ['PENDING', 'APPROVED'], true)) {
+            throw new ApiException('Een afgewezen of geannuleerde aanvraag kun je niet meer wijzigen.', 409);
+        }
+        if ($booking['start_date'] < date('Y-m-d')) {
+            throw new ApiException('De opvang is al begonnen. Neem contact op met de opvang.', 409);
+        }
+
+        return $booking;
+    }
+
+    // Naam van een opvang. Bestaat hij niet, dan een fout bij het veld shelter_id.
+    private function shelterName(int $shelterId): string
+    {
+        $stmt = Database::connect()->prepare('SELECT name FROM shelters WHERE id = ?');
+        $stmt->execute([$shelterId]);
+        $name = $stmt->fetchColumn();
+
+        if ($name === false) {
+            throw new ApiException('Controleer de ingevulde velden.', 422, ['shelter_id' => 'Kies een opvang uit de lijst.']);
+        }
+
+        return $name;
+    }
+
+    // Zet een slot op de capaciteit en controleert of er op ELKE dag plek is (FE2).
+    // Moet binnen een transactie worden aangeroepen.
+    //
+    // Probleem zonder slot: twee eigenaren boeken tegelijk de laatste plek,
+    // allebei zien ze "1 vrij" en allebei wordt de boeking opgeslagen -> overvol.
+    // Oplossing: FOR UPDATE zet een slot (lock) op de capaciteitsregels van deze periode.
+    // Een tweede boeking voor dezelfde opvang en diersoort moet dan wachten
+    // tot de eerste klaar is, en ziet daarna de juiste (bijgewerkte) bezetting.
+    private function lockAndCheckCapacity(PDO $pdo, int $shelterId, string $shelterName, string $species, string $start, string $end): void
+    {
+        $stmt = $pdo->prepare(
+            'SELECT id FROM capacities
+             WHERE shelter_id = ? AND species = ? AND date BETWEEN ? AND ?
+             FOR UPDATE'
+        );
+        $stmt->execute([$shelterId, $species, $start, $end]);
+
+        $fullDates = [];
+        foreach (CapacityService::perDay($shelterId, $species, $start, $end) as $day) {
+            if ($day['free'] === 0) {
+                $fullDates[] = date('d-m-Y', strtotime($day['date']));
+            }
+        }
+
+        if (!empty($fullDates)) {
+            throw new ApiException("Geen plek beschikbaar bij $shelterName op: " . implode(', ', $fullDates) . '. Er is niets opgeslagen.', 409);
+        }
     }
 }

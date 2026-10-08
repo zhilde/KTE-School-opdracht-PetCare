@@ -79,6 +79,7 @@ textarea:focus-visible, summary:focus-visible {
   min-height: 44px; padding: 8px 16px; border-radius: 6px;
   font-size: 1rem; font-weight: 600; cursor: pointer; border: 2px solid transparent;
 }
+a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .btn-small { min-height: 36px; padding: 4px 12px; font-size: 0.9rem; }
 .btn-full { width: 100%; }
 .btn-primary { background: var(--primary); color: #fff; }
@@ -87,6 +88,7 @@ textarea:focus-visible, summary:focus-visible {
 .btn-danger { background: #fff; color: var(--error-text); border-color: var(--error-text); }
 .btn:disabled { background: #C9CEC9; color: #555; cursor: not-allowed; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.card-actions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 /* ---------- Formulieren ---------- */
 .field { margin-bottom: 16px; }
@@ -115,6 +117,7 @@ textarea:focus-visible, summary:focus-visible {
 .badge-pending { background: var(--pending-bg); color: var(--pending-text); }
 .badge-approved { background: var(--success-bg); color: var(--success-text); }
 .badge-rejected { background: var(--error-bg); color: var(--error-text); }
+.badge-cancelled { background: var(--empty-bg); color: var(--empty-text); }
 .badge-sensitive { background: var(--empty-bg); color: var(--text); font-weight: 500; }
 .status-text { font-weight: 600; }
 .status-text.ok { color: var(--success-text); }
@@ -125,12 +128,46 @@ textarea:focus-visible, summary:focus-visible {
 .login-card { width: 100%; max-width: 400px; }
 .login-logo { display: block; width: 220px; max-width: 100%; margin: 0 auto 24px; }
 
+/* ---------- Dierdetails ---------- */
+.instruction-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.history { padding-left: 18px; }
+.history li { margin-bottom: 8px; }
+summary { cursor: pointer; font-weight: 600; }
+
 /* ---------- Lijsten en filters ---------- */
 .list { list-style: none; padding: 0; }
 .list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
 .list li:last-child { border-bottom: none; }
 
+/* ---------- Agenda (Capaciteit) ----------
+   Telefoon: een lijst met alleen dagen waar capaciteit is ingesteld.
+   Vanaf tablet: een echte maandkalender met 7 kolommen. */
+.calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.calendar-head h2 { margin: 0; text-align: center; text-transform: capitalize; }
+.calendar { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 24px; }
+.calendar-weekday, .calendar-empty { display: none; }
+.calendar-day {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+}
+.calendar-day.is-empty { display: none; }
+.calendar-day.is-past { opacity: 0.55; }
+.calendar-day.is-today { border: 2px solid var(--primary); }
+.calendar-day.is-selected { background: var(--success-bg); }
+.calendar-date {
+  align-self: flex-start; background: none; border: none; padding: 2px 4px;
+  font: inherit; font-weight: 700; cursor: pointer; color: var(--text);
+}
+.calendar-slot {
+  text-align: left; font: inherit; font-size: 0.85rem; cursor: pointer;
+  background: var(--success-bg); color: var(--success-text);
+  border: 1px solid transparent; border-radius: 4px; padding: 4px 6px; min-height: 32px;
+}
+.calendar-slot.is-full { background: var(--error-bg); color: var(--error-text); font-weight: 600; }
+.calendar-day button:disabled { cursor: default; }
+
 /* ---------- Tabel: op telefoon wordt elke rij een kaart ---------- */
+.table-wrap { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; }
 .table thead { display: none; }
 .table tr { display: block; background: #fff; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; padding: 8px 12px; }
@@ -143,8 +180,18 @@ textarea:focus-visible, summary:focus-visible {
   .menu-toggle { display: none; }
   .mainnav { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 16px; width: auto; padding: 0; }
   .mainnav a.active { border-left: none; padding-left: 4px; border-bottom: 3px solid var(--primary); }
-  .filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  /* Velden bovenaan uitlijnen: een foutmelding onder één veld duwt de andere velden dan niet omhoog */
+  .filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
   .filters .field { flex: 1 1 160px; margin-bottom: 0; }
+  /* Knop op dezelfde hoogte als de invoervelden: hoogte van het label (24px) + ruimte eronder (4px) */
+  .filters > .btn { margin-top: 28px; }
+
+  /* Agenda: 7 kolommen (ma t/m zo), ook lege dagen tonen */
+  .calendar { grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .calendar-weekday { display: block; text-align: center; font-weight: 600; color: var(--muted); }
+  .calendar-empty { display: block; }
+  .calendar-day, .calendar-day.is-empty { display: flex; min-height: 96px; padding: 4px; }
+  .calendar-weekday-small { display: none; }
 }
 
 /* ================= Desktop (1024px en breder) ================= */

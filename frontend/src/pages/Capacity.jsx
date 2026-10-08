@@ -4,8 +4,30 @@ import { SPECIES, formatDate, speciesLabel, today } from '../constants.js'
 import Alert from '../components/Alert.jsx'
 import FormField from '../components/FormField.jsx'
 
+const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli',
+  'augustus', 'september', 'oktober', 'november', 'december']
+const WEEKDAYS = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo']
+
+// Date-object -> '2026-10-08'
+function toIso(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+// Alle dagen van een maand als lijst van Date-objecten
+function daysOfMonth(year, month) {
+  const days = []
+  const date = new Date(year, month, 1)
+  while (date.getMonth() === month) {
+    days.push(new Date(date))
+    date.setDate(date.getDate() + 1)
+  }
+  return days
+}
+
 // Scherm "Capaciteit" voor de beheerder (FE3):
-// plekken instellen per opvang, datum en diersoort + overzicht van 14 dagen
+// plekken instellen per opvang, datum en diersoort + maandagenda met bezet/vrij per dag
 export default function Capacity() {
   const [shelters, setShelters] = useState([])
   const [form, setForm] = useState({ shelter_id: '', date: today(), species: '', max_slots: '' })
@@ -14,10 +36,18 @@ export default function Capacity() {
   const [errorMessage, setErrorMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Overzicht
-  const [from, setFrom] = useState(today())
+  // Agenda: welke maand wordt getoond (begint bij de huidige maand).
+  // today() = '2026-10-08' -> jaar 2026, maand 9 (januari = 0 in JavaScript)
+  const [currentYear, currentMonth] = [Number(today().slice(0, 4)), Number(today().slice(5, 7)) - 1]
+  const [year, setYear] = useState(currentYear)
+  const [month, setMonth] = useState(currentMonth)
   const [rows, setRows] = useState([])
   const [loadingRows, setLoadingRows] = useState(true)
+
+  const days = daysOfMonth(year, month)
+  const from = toIso(days[0])
+  const to = toIso(days[days.length - 1])
+  const isCurrentMonth = year === currentYear && month === currentMonth
 
   // Opvangen ophalen voor de keuzelijst, de eerste opvang meteen kiezen
   useEffect(() => {
@@ -31,20 +61,20 @@ export default function Capacity() {
       .catch((error) => setErrorMessage(error.message))
   }, [])
 
-  // Overzicht ophalen voor de gekozen opvang en startdatum
-  function fetchRows(shelterId, fromDate) {
-    api(`/capacities?shelter_id=${shelterId}&from=${fromDate}`)
+  // Capaciteit van de hele maand ophalen
+  function fetchRows(shelterId, fromDate, toDate) {
+    api(`/capacities?shelter_id=${shelterId}&from=${fromDate}&to=${toDate}`)
       .then((data) => setRows(data.capacities))
       .catch((error) => setErrorMessage(error.message))
       .finally(() => setLoadingRows(false))
   }
 
-  // Opnieuw laden als de opvang of de startdatum verandert
+  // Opnieuw laden als de opvang of de maand verandert
   useEffect(() => {
-    if (form.shelter_id && from) {
-      fetchRows(form.shelter_id, from)
+    if (form.shelter_id) {
+      fetchRows(form.shelter_id, from, to)
     }
-  }, [form.shelter_id, from])
+  }, [form.shelter_id, from, to])
 
   // Eén functie voor alle velden: name van het veld = sleutel in form
   function handleChange(event) {
@@ -61,8 +91,7 @@ export default function Capacity() {
     try {
       const data = await api('/capacities', { method: 'PUT', body: form })
       setMessage(data.message)
-      setLoadingRows(true)
-      fetchRows(form.shelter_id, from)
+      fetchRows(form.shelter_id, from, to)
     } catch (error) {
       setErrorMessage(error.message)
       setErrors(error.errors ?? {})
@@ -71,12 +100,35 @@ export default function Capacity() {
     }
   }
 
-  // Knop "Wijzigen" in de tabel: gegevens van die regel in het formulier zetten
-  function editRow(row) {
-    setForm({ ...form, date: row.date, species: row.species, max_slots: String(row.max_slots) })
+  // Naar de vorige of volgende maand (step = -1 of 1)
+  function changeMonth(step) {
+    const date = new Date(year, month + step, 1)
+    setYear(date.getFullYear())
+    setMonth(date.getMonth())
+    setLoadingRows(true)
+  }
+
+  // Klik op een dag of een diersoort in de agenda: gegevens in het formulier zetten
+  function pick(date, row) {
+    setForm({
+      ...form,
+      date,
+      species: row ? row.species : form.species,
+      max_slots: row ? String(row.max_slots) : form.max_slots,
+    })
     setMessage('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // Regels per datum groeperen: { '2026-10-08': [ {species: 'hond', ...}, ... ] }
+  const rowsPerDate = {}
+  for (const row of rows) {
+    if (!rowsPerDate[row.date]) rowsPerDate[row.date] = []
+    rowsPerDate[row.date].push(row)
+  }
+
+  // Lege vakjes vóór de 1e van de maand, zodat die op de goede weekdag staat (maandag = eerste kolom)
+  const emptyCells = (days[0].getDay() + 6) % 7
 
   const shelterName = shelters.find((s) => String(s.id) === form.shelter_id)?.name ?? ''
 
@@ -110,48 +162,57 @@ export default function Capacity() {
         </button>
       </form>
 
-      <div className="page-head">
-        <h2>Overzicht {shelterName}</h2>
-        <div className="field">
-          <label htmlFor="from">Vanaf</label>
-          <input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
+      {/* Maandagenda */}
+      <div className="calendar-head">
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => changeMonth(-1)}
+          disabled={isCurrentMonth} aria-label="Vorige maand">←</button>
+        <h2>{MONTHS[month]} {year} · {shelterName}</h2>
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => changeMonth(1)}
+          aria-label="Volgende maand">→</button>
       </div>
+      <p className="muted">Klik op een dag of diersoort om die in het formulier te zetten.</p>
 
       {loadingRows && <p className="loading">Bezig met laden…</p>}
 
       {!loadingRows && rows.length === 0 && (
-        <Alert type="empty">Er is voor deze 14 dagen nog geen capaciteit ingesteld.</Alert>
+        <Alert type="empty">Er is in {MONTHS[month]} nog geen capaciteit ingesteld voor deze opvang.</Alert>
       )}
 
-      {rows.length > 0 && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr><th>Datum</th><th>Soort</th><th>Plekken</th><th>Bezet</th><th>Vrij</th><th>Actie</th></tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.date + row.species}>
-                  <td data-label="Datum">{formatDate(row.date)}</td>
-                  <td data-label="Soort">{speciesLabel(row.species)}</td>
-                  <td data-label="Plekken">{row.max_slots}</td>
-                  <td data-label="Bezet">{row.booked}</td>
-                  <td data-label="Vrij">
-                    {/* Vol: tekst + kleur, niet alleen kleur */}
+      {!loadingRows && (
+        <div className="calendar">
+          {WEEKDAYS.map((d) => <div key={d} className="calendar-weekday">{d}</div>)}
+          {Array.from({ length: emptyCells }, (_, i) => <div key={`leeg-${i}`} className="calendar-empty" />)}
+
+          {days.map((day) => {
+            const date = toIso(day)
+            const isPast = date < today()
+            const dayRows = rowsPerDate[date] ?? []
+            // Op telefoon tonen we geen dagen zonder capaciteit, anders wordt de lijst erg lang
+            const classes = ['calendar-day']
+            if (isPast) classes.push('is-past')
+            if (date === today()) classes.push('is-today')
+            if (date === form.date) classes.push('is-selected')
+            if (dayRows.length === 0) classes.push('is-empty')
+
+            return (
+              <div key={date} className={classes.join(' ')}>
+                <button type="button" className="calendar-date" disabled={isPast} onClick={() => pick(date)}
+                  aria-label={`${formatDate(date)} kiezen`}>
+                  <span className="calendar-weekday-small">{WEEKDAYS[(day.getDay() + 6) % 7]}</span> {day.getDate()}
+                </button>
+
+                {dayRows.map((row) => (
+                  <button key={row.species} type="button" disabled={isPast} onClick={() => pick(date, row)}
+                    className={row.free === 0 ? 'calendar-slot is-full' : 'calendar-slot'}>
+                    {speciesLabel(row.species)}{' '}
                     {row.free === 0
-                      ? <span className="status-text full">✕ Vol</span>
-                      : row.free}
-                  </td>
-                  <td data-label="Actie">
-                    <button type="button" className="btn btn-secondary btn-small" onClick={() => editRow(row)}>
-                      Wijzigen
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      ? <>✕ vol ({row.booked}/{row.max_slots})</>
+                      : <>{row.free}/{row.max_slots} vrij</>}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
     </section>

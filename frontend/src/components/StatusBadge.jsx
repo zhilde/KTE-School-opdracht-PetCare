@@ -3,6 +3,7 @@ const statuses = {
   PENDING: { className: 'badge-pending', text: '⏳ In behandeling' },
   APPROVED: { className: 'badge-approved', text: '✓ Goedgekeurd' },
   REJECTED: { className: 'badge-rejected', text: '✕ Afgewezen' },
+  CANCELLED: { className: 'badge-cancelled', text: '⊘ Geannuleerd' },
 }
 
 export default function StatusBadge({ status }) {

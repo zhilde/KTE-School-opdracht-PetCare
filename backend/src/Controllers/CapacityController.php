@@ -3,11 +3,11 @@
 // API voor capaciteit beheren (FE3). Alleen voor de beheerder.
 class CapacityController
 {
-    // Hoeveel dagen het overzicht laat zien
-    private const OVERVIEW_DAYS = 14;
+    // Maximaal zoveel dagen per overzicht (een maand in de agenda past hier ruim in)
+    private const MAX_OVERVIEW_DAYS = 42;
 
-    // GET /api/capacities?shelter_id=1&from=2026-10-08
-    // Overzicht van 14 dagen: per datum en diersoort de plekken, bezet en vrij
+    // GET /api/capacities?shelter_id=1&from=2026-10-01&to=2026-10-31
+    // Overzicht per datum en diersoort: plekken, bezet en vrij. "to" is optioneel (standaard 14 dagen).
     public function index(): void
     {
         Auth::requireRole('admin');
@@ -17,11 +17,19 @@ class CapacityController
         $v->integer('shelter_id', 1, PHP_INT_MAX, 'Kies een opvang uit de lijst.');
         $v->required('from', 'Kies een datum.');
         $v->date('from', 'Vul een geldige datum in.');
+        $v->date('to', 'Vul een geldige einddatum in.');
         $v->validate();
 
         $shelterId = (int) $v->get('shelter_id');
         $from = $v->get('from');
-        $to = date('Y-m-d', strtotime($from . ' +' . (self::OVERVIEW_DAYS - 1) . ' days'));
+        $to = $v->get('to') !== '' ? $v->get('to') : date('Y-m-d', strtotime($from . ' +13 days'));
+
+        if ($to < $from) {
+            throw new ApiException('Controleer de ingevulde velden.', 422, ['to' => 'De einddatum moet op of na de begindatum liggen.']);
+        }
+        if ((new DateTime($from))->diff(new DateTime($to))->days >= self::MAX_OVERVIEW_DAYS) {
+            throw new ApiException('Controleer de ingevulde velden.', 422, ['to' => 'Je kunt maximaal ' . self::MAX_OVERVIEW_DAYS . ' dagen tegelijk bekijken.']);
+        }
 
         $this->findShelter($shelterId);
 

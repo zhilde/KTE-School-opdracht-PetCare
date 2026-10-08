@@ -40,6 +40,8 @@ $router->get('/api/availability', [$shelters, 'availability']);
 $bookings = new BookingController();
 $router->get('/api/bookings/mine', [$bookings, 'mine']);
 $router->post('/api/bookings', [$bookings, 'store']);
+$router->put('/api/bookings/{id}/cancel', [$bookings, 'cancel']);
+$router->put('/api/bookings/{id}/shelter', [$bookings, 'changeShelter']);
 
 // Aanvragen beoordelen door medewerker/beheerder (FE6)
 $router->get('/api/bookings', [$bookings, 'index']);
